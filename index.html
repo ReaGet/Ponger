@@ -6,15 +6,24 @@
 <style type="text/css">
 	* { margin: 0; padding: 0; }
 	body { background: #3a3a3a; }
-	canvas { background: #fff; }
+	canvas { background: #fff; position: absolute; margin: auto; left: 0; right: 0; top: 0; bottom: 0;}
 	video { display: none; }
 </style>
 <body>
 <video width="100" height="100" autoplay></video>
 <canvas></canvas>
 <script type="text/javascript">
+	var p1Color = null,
+		p2Color = null,
+		p1Stroke = "#fff",
+		p2Stroke = "#fff",
+		p1Chosen = false,
+		p2Chosen = false;
+
+	var pressed = false;
+
 	var Game = {
-		WIDTH: 800,
+		WIDTH: 840,
 		HEIGHT: 400,
 	    DEVICE_WIDTH: null,
 	    DEVICE_HEIGHT: null,
@@ -44,6 +53,26 @@
 	        Game.canvas.height = Game.HEIGHT;
 
 	        Game.ctx = Game.canvas.getContext('2d');
+
+	        Game.STATE.set(Game.STATE.INIT);
+
+	        window.addEventListener("keydown", function(e) {
+	        	if (!pressed) {
+		        	if (e.keyCode == 90) // Z
+		        		p1Chosen = true;
+		        	if (e.keyCode == 88) // X
+		        		p2Chosen = true;
+		        	if (e.keyCode == 27) { // Esc
+		        		Game.STATE.set(Game.STATE.INIT);
+		        		p1Chosen = p2Chosen = false;
+		        	}
+		        	pressed = true;
+		        }
+	        }, false);
+
+	        window.addEventListener("keyup", function(e) {
+	        	pressed = false;
+	        }, false);
 
 	        Game.initCamera();
 	        Game.resize();
@@ -97,33 +126,65 @@
 	        Game.canvas.style.height = Game.currentHeight + 'px';
 		},
 		loop: function() {
-			Game.vCtx.drawImage(Game.video, 0, 0, 200, 100);
-			Game.ctx.fillStyle = "#000";
-			Game.ctx.fillRect(0, 0, Game.WIDTH, Game.HEIGHT);
+			switch(Game.STATE.CURRENT) {
+				case Game.STATE.INIT:
+					Game.ctx.fillStyle = "#000";
+					Game.ctx.fillRect(0, 0, Game.WIDTH, Game.HEIGHT);
+					Game.ctx.drawImage(Game.video, 20, 0, 800, 400);
 
-			var r = Game.detectColor({ r: 229, g: 73, b: 73, a: 70 }, { r: 73, g: 73, b: 229, a: 80 });
+					Game.ctx.strokeStyle = p1Stroke;
+					Game.ctx.strokeRect(40, 100, 150, 200);
 
-			var p1 = { x: 0, y: r[0].y, width: 20, height: 100 };
-			var p2 = { x: Game.WIDTH - 50, y: r[1].y, width: 20, height: 100 };
+					Game.ctx.strokeStyle = p2Stroke;
+					Game.ctx.strokeRect(Game.WIDTH - 240, 100, 150, 200);
 
-			Game.ctx.strokeStyle = "#fff";
-			Game.ctx.strokeRect(p1.x, p1.y, p1.width, p1.height);
-			Game.ctx.strokeRect(p2.x, p2.y, p2.width, p2.height);
+					if (!p1Chosen) {
+						p1Color = getAvrColor(Game.ctx.getImageData(40, 100, 150, 200));
+						p1Stroke = "rgb(" + p1Color.r + "," + p1Color.g + "," + p1Color.b + ")";
+					}
 
-			if (collide(ball, p1) || collide(ball, p2))
-				ball.vx *= -1;
+					if (!p2Chosen) {
+						p2Color = getAvrColor(Game.ctx.getImageData(Game.WIDTH - 240, 100, 150, 200));
+						p2Stroke = "rgb(" + p2Color.r + "," + p2Color.g + "," + p2Color.b + ")";
+					}
 
-			if (ball.x < 0 || ball.x + ball.width > Game.WIDTH)
-				ball.vx *= -1;
+					if (p1Chosen && p2Chosen)
+						Game.STATE.set(Game.STATE.GAMEPLAY);
+					// Game.ctx.beginPath();
+					// Game.ctx.arc(80, 200, 60, 0, Math.PI * 2);
+					// Game.ctx.stroke();
+					break;
+				case Game.STATE.GAMEPLAY:
+					Game.vCtx.drawImage(Game.video, 0, 0, 200, 100);
+					Game.ctx.fillStyle = "#000";
+					Game.ctx.fillRect(0, 0, Game.WIDTH, Game.HEIGHT);
 
-			if (ball.y < 0 || ball.y + ball.height > Game.HEIGHT)
-				ball.vy *= -1;
+					var r = Game.detectColor({ r: p1Color.r, g: p1Color.g, b: p1Color.b, a: 3 }, 
+											 { r: p2Color.r, g: p2Color.g, b: p2Color.b, a: 3 });
 
-			ball.x += ball.vx;
-			ball.y += ball.vy;
+					var p1 = { x: 30, y: r[0].y, width: 20, height: 100 };
+					var p2 = { x: Game.WIDTH - 50, y: r[1].y, width: 20, height: 100 };
 
-			Game.ctx.fillStyle = "#fff";
-			Game.ctx.fillRect(ball.x, ball.y, ball.width, ball.height);
+					Game.ctx.strokeStyle = "#fff";
+					Game.ctx.strokeRect(p1.x, p1.y, p1.width, p1.height);
+					Game.ctx.strokeRect(p2.x, p2.y, p2.width, p2.height);
+
+					if (collide(ball, p1) || collide(ball, p2))
+						ball.vx *= -1;
+
+					if (ball.x < 0 || ball.x + ball.width > Game.WIDTH)
+						ball.vx *= -1;
+
+					if (ball.y < 0 || ball.y + ball.height > Game.HEIGHT)
+						ball.vy *= -1;
+
+					ball.x += ball.vx;
+					ball.y += ball.vy;
+
+					Game.ctx.fillStyle = "#fff";
+					Game.ctx.fillRect(ball.x, ball.y, ball.width, ball.height);
+					break;
+			}
 
 			window.requestAnimationFrame(Game.loop);
 		},
@@ -175,6 +236,31 @@
 			return rects;
 			// Game.ctx.strokeStyle = "rgb(" + c.r + ", " + c.g + ", " + c.b + ")";
 			// Game.ctx.strokeRect(minx / 4, miny / 2, w, h);
+		}
+	};
+
+	function getAvrColor(data) {
+		var r = 0,
+			g = 0,
+			b = 0;
+		var num = data.data.length / 4;
+		for (var i = 0; i < data.data.length; i += 4) {
+			r += data.data[i];
+			g += data.data[i + 1];
+			b += data.data[i + 2];	
+		}
+
+		return { r: ~~(r / num),
+				 g: ~~(g / num),
+				 b: ~~(b / num) }
+	}
+
+	Game.STATE = {
+		INIT: "init",
+		GAMEPLAY: "gameplay",
+		CURRENT: this.INIT,
+		set: function(state) {
+			this.CURRENT = state;
 		}
 	};
 
