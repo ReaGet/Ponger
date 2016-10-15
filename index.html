@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>JS</title>
+</head>
+<style type="text/css">
+	* { margin: 0; padding: 0; }
+	body { background: #3a3a3a; }
+	canvas { background: #fff; }
+	video { display: none; }
+</style>
+<body>
+<video width="100" height="100" autoplay></video>
+<canvas></canvas>
+<script type="text/javascript">
+	var Game = {
+		WIDTH: 800,
+		HEIGHT: 400,
+	    DEVICE_WIDTH: null,
+	    DEVICE_HEIGHT: null,
+	    RATIO: null,
+	    currentWidth: null,
+	    currentHeight: null,
+	    canvas: null,
+	    vCanvas: null,
+	    ctx: null,
+	    vCtx: null,
+	    video: null,
+	    scale: 1,
+
+		init: function() {
+			Game.video = document.querySelector('video');
+			Game.RATIO = Game.WIDTH / Game.HEIGHT;
+	        Game.currentWidth = Game.WIDTH;
+	        Game.currentHeight = Game.HEIGHT;
+
+	        Game.vCanvas = document.createElement('canvas');
+	        Game.vCanvas.width = Game.WIDTH;
+	        Game.vCanvas.height = Game.HEIGHT;
+	        Game.vCtx = Game.vCanvas.getContext('2d');
+
+	        Game.canvas = document.getElementsByTagName('canvas')[0];
+	        Game.canvas.width = Game.WIDTH;
+	        Game.canvas.height = Game.HEIGHT;
+
+	        Game.ctx = Game.canvas.getContext('2d');
+
+	        Game.initCamera();
+	        Game.resize();
+	        Game.loop();
+		},
+
+		initCamera: function() {
+			function errBack(err) {
+				console.log("Video capture error: ", err.code); 
+			}
+			if(navigator.getUserMedia) { // Standard
+				navigator.getUserMedia({ "video": true }, function(stream) {
+					Game.video.src = stream;
+					Game.video.play();
+				}, errBack);
+			} else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
+				navigator.webkitGetUserMedia({ "video": true }, function(stream){
+					Game.video.src = window.webkitURL.createObjectURL(stream);
+					Game.video.play();
+				}, errBack);
+			}
+			else if(navigator.mozGetUserMedia) { // Firefox-prefixed
+				navigator.mozGetUserMedia({ "video": true }, function(stream){
+					Game.video.src = window.URL.createObjectURL(stream);
+					Game.video.play();
+				}, errBack);
+			}
+		},
+
+		resize: function() {
+			Game.DEVICE_WIDTH = window.innerWidth;
+	        Game.DEVICE_HEIGHT = window.innerHeight;
+
+	        var ratio = Game.DEVICE_WIDTH / Game.DEVICE_HEIGHT,
+	            scale = 1;
+
+	        // WIDTH higher then HEIGHT
+	        if (ratio > Game.RATIO) {
+	            scale = Game.DEVICE_HEIGHT / Game.HEIGHT;
+	        } // HEIGHT higher then WIDTH
+	        else if (ratio < Game.RATIO) {
+	            scale = Game.DEVICE_WIDTH / Game.WIDTH;
+	        }
+
+	        Game.currentHeight = Game.HEIGHT * scale;
+	        Game.currentWidth = Game.WIDTH * scale;
+
+	        	Game.scale = Game.currentHeight / 100;
+
+	        Game.canvas.style.width = Game.currentWidth + 'px';
+	        Game.canvas.style.height = Game.currentHeight + 'px';
+		},
+		loop: function() {
+			Game.vCtx.drawImage(Game.video, 0, 0, 200, 100);
+			Game.ctx.fillStyle = "#000";
+			Game.ctx.fillRect(0, 0, Game.WIDTH, Game.HEIGHT);
+
+			var r = Game.detectColor({ r: 229, g: 73, b: 73, a: 70 }, { r: 73, g: 73, b: 229, a: 80 });
+
+			var p1 = { x: 0, y: r[0].y, width: 20, height: 100 };
+			var p2 = { x: Game.WIDTH - 50, y: r[1].y, width: 20, height: 100 };
+
+			Game.ctx.strokeStyle = "#fff";
+			Game.ctx.strokeRect(p1.x, p1.y, p1.width, p1.height);
+			Game.ctx.strokeRect(p2.x, p2.y, p2.width, p2.height);
+
+			if (collide(ball, p1) || collide(ball, p2))
+				ball.vx *= -1;
+
+			if (ball.x < 0 || ball.x + ball.width > Game.WIDTH)
+				ball.vx *= -1;
+
+			if (ball.y < 0 || ball.y + ball.height > Game.HEIGHT)
+				ball.vy *= -1;
+
+			ball.x += ball.vx;
+			ball.y += ball.vy;
+
+			Game.ctx.fillStyle = "#fff";
+			Game.ctx.fillRect(ball.x, ball.y, ball.width, ball.height);
+
+			window.requestAnimationFrame(Game.loop);
+		},
+
+		detectColor: function() {
+			var data = Game.vCtx.getImageData(0, 0, 200, 100);
+			var rects = [];
+
+			for (var j = 0; j < arguments.length; j++) {
+				var minx = Game.WIDTH * 8,
+					miny = Game.HEIGHT * 4,
+					maxx = 0,
+					maxy = 0,
+					c = arguments[j];
+
+				for (var i = 0; i < data.data.length; i += 4) {
+					var r = data.data[i],
+						g = data.data[i + 1],
+						b = data.data[i + 2];
+
+					var x = i % 800,
+						y = ~~(i / 400);
+
+					if (dist(r, g, b, c.r, c.g, c.b) < c.a) {
+						if (minx > x) {
+							minx = x;
+						}
+						if (maxx < x) {
+							maxx = x;
+						}
+						if (miny > y) {
+							miny = y;
+						}
+						if (maxy < y) {
+							maxy = y;
+						}
+					}
+				}
+
+				var w = (maxx - minx) / 4,
+					h = (maxy - miny) / 2;
+
+				rects.push({ x: minx / 4 * Game.scale,
+							 y: miny / 2 * Game.scale,
+							 width: w * Game.scale,
+							 height: h * Game.scale });
+			}
+
+			return rects;
+			// Game.ctx.strokeStyle = "rgb(" + c.r + ", " + c.g + ", " + c.b + ")";
+			// Game.ctx.strokeRect(minx / 4, miny / 2, w, h);
+		}
+	};
+
+	var ball = {
+		x: (Game.WIDTH - 30) / 2,
+		y: (Game.HEIGHT - 30) / 2,
+		width: 20,
+		height: 20,
+		vx: 2,
+		vy: 2
+	}
+
+	function collide(obj1, obj2) {
+		return obj1.x < obj2.x + obj2.width &&
+			   obj1.x + obj1.width > obj2.x &&
+			   obj1.y < obj2.y + obj2.height &&
+			   obj1.y + obj1.height > obj2.y;
+	}
+
+	function dist(r1, g1, b1, r2, g2, b2) {
+		return Math.sqrt((r2 - r1) * (r2 - r1) + (g2 - g1) * (g2 - g1) + (b2 - b1) * (b2 - b1));
+	}
+
+	(function () {
+	    var overlay, lastCount, lastTime, timeoutFun;
+
+	    overlay = document.createElement('div');
+	    overlay.style.background = 'rgba(0, 0, 0, .7)';
+	    overlay.style.bottom = '0';
+	    overlay.style.color = '#fff';
+	    overlay.style.display = 'inline-block';
+	    overlay.style.fontFamily = 'Arial';
+	    overlay.style.fontSize = '10px';
+	    overlay.style.lineHeight = '12px';
+	    overlay.style.padding = '5px 8px';
+	    overlay.style.position = 'fixed';
+	    overlay.style.right = '0';
+	    overlay.style.zIndex = '1000000';
+	    overlay.innerHTML = 'FPS: -';
+	    document.body.appendChild(overlay);
+
+	    lastCount = window.mozPaintCount;
+	    lastTime = performance.now();
+
+	    (timeoutFun = function () {
+	        var curCount, curTime;
+
+	        curCount = window.mozPaintCount;
+	        curTime = performance.now();
+	        overlay.innerHTML = 'FPS: ' + ((curCount - lastCount) / (curTime - lastTime) * 1000).toFixed(2);
+	        lastCount = curCount;
+	        lastTime = curTime;
+	        setTimeout(timeoutFun, 1000);
+	    })();
+	}());
+
+	window.addEventListener('load', Game.init, false);
+	window.addEventListener('resize', Game.resize, false);
+</script>
+</body>
+</html>
